@@ -35,6 +35,24 @@ void hts221_write_reg(uint8_t *data, uint8_t length, uint8_t reg)
 	i2c_write(data, length, reg, HTS221_I2C_ADDRESS);
 }
 
+/* kalibracne data (registre 0x30 - 0x3F) a z nich vypocitane hodnoty pre teplotu */
+static uint8_t calib[16];
+static float T0_degC, T1_degC;
+static int16_t T0_out, T1_out;
+
+static void hts221_calc_temp_calibration(void)
+{
+	// T0 a T1 maju 10 bitov, horne 2 bity su v registri 0x35, hodnoty su nasobene 8
+	uint16_t T0_degC_x8 = calib[0x02] | ((calib[0x05] & 0x03) << 8);
+	uint16_t T1_degC_x8 = calib[0x03] | ((calib[0x05] & 0x0C) << 6);
+
+	T0_degC = T0_degC_x8 / 8.0f;
+	T1_degC = T1_degC_x8 / 8.0f;
+
+	T0_out = (int16_t)((calib[0x0D] << 8) | calib[0x0C]);
+	T1_out = (int16_t)((calib[0x0F] << 8) | calib[0x0E]);
+}
+
 // vrati 1 ak je senzor pripojeny a nakonfigurovany, inak 0
 uint8_t hts221_init(void)
 {
@@ -56,6 +74,20 @@ uint8_t hts221_init(void)
 	// zapnutie senzora, block data update, frekvencia merania 12.5 Hz
 	config = HTS221_CTRL_REG1_PD | HTS221_CTRL_REG1_BDU | HTS221_CTRL_REG1_ODR_12_5HZ;
 	hts221_write_reg(&config, 1, HTS221_CTRL_REG1_ADDR);
+	// nacitanie kalibracnych registrov naraz (multi-byte citanie)
+	hts221_read_reg(calib, 16, HTS221_H0_RH_X2_ADDR);
+	hts221_calc_temp_calibration();
 
 	return 1;
+}
+// vrati teplotu v stupnoch Celzia
+float hts221_get_temperature(void)
+{
+	uint8_t data[2];
+
+	hts221_read_reg(data, 2, HTS221_TEMP_OUT_L_ADDR);
+	int16_t t_out = (int16_t)((data[1] << 8) | data[0]);
+
+	// linearna interpolacia medzi kalibracnymi bodmi
+	return T0_degC + (float)(t_out - T0_out) * (T1_degC - T0_degC) / (float)(T1_out - T0_out);
 }
