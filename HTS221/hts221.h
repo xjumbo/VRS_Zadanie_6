@@ -54,4 +54,10 @@
 typedef void (*hts221_read_cb_t)(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr);
 typedef void (*hts221_write_cb_t)(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr);
 
+/* verejne funkcie */
+void hts221_register_callbacks(hts221_read_cb_t read_cb, hts221_write_cb_t write_cb);
+uint8_t hts221_init(void);
+void hts221_read_reg(uint8_t *data, uint8_t length, uint8_t reg);
+void hts221_write_reg(uint8_t *data, uint8_t length, uint8_t reg);
+
 #endif /* HTS221_H_ */

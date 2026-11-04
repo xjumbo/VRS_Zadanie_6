@@ -26,7 +26,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "hts221.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -99,6 +99,11 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   LL_I2C_Enable(I2C1);
+  hts221_register_callbacks(i2c_master_read, i2c_master_write);
+  if(hts221_init() == 0)
+  {
+  	Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
