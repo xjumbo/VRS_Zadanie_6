@@ -60,4 +60,5 @@ uint8_t hts221_init(void);
 void hts221_read_reg(uint8_t *data, uint8_t length, uint8_t reg);
 void hts221_write_reg(uint8_t *data, uint8_t length, uint8_t reg);
 float hts221_get_temperature(void);
+float hts221_get_humidity(void);
 #endif /* HTS221_H_ */

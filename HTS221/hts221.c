@@ -39,6 +39,8 @@ void hts221_write_reg(uint8_t *data, uint8_t length, uint8_t reg)
 static uint8_t calib[16];
 static float T0_degC, T1_degC;
 static int16_t T0_out, T1_out;
+static float H0_rH, H1_rH;
+static int16_t H0_T0_out, H1_T0_out;
 
 static void hts221_calc_temp_calibration(void)
 {
@@ -51,6 +53,15 @@ static void hts221_calc_temp_calibration(void)
 
 	T0_out = (int16_t)((calib[0x0D] << 8) | calib[0x0C]);
 	T1_out = (int16_t)((calib[0x0F] << 8) | calib[0x0E]);
+}
+static void hts221_calc_hum_calibration(void)
+{
+	// hodnoty vlhkosti v kalibracnych registroch su nasobene 2
+	H0_rH = calib[0x00] / 2.0f;
+	H1_rH = calib[0x01] / 2.0f;
+
+	H0_T0_out = (int16_t)((calib[0x07] << 8) | calib[0x06]);
+	H1_T0_out = (int16_t)((calib[0x0B] << 8) | calib[0x0A]);
 }
 
 // vrati 1 ak je senzor pripojeny a nakonfigurovany, inak 0
@@ -77,6 +88,7 @@ uint8_t hts221_init(void)
 	// nacitanie kalibracnych registrov naraz (multi-byte citanie)
 	hts221_read_reg(calib, 16, HTS221_H0_RH_X2_ADDR);
 	hts221_calc_temp_calibration();
+	hts221_calc_hum_calibration();
 
 	return 1;
 }
@@ -90,4 +102,28 @@ float hts221_get_temperature(void)
 
 	// linearna interpolacia medzi kalibracnymi bodmi
 	return T0_degC + (float)(t_out - T0_out) * (T1_degC - T0_degC) / (float)(T1_out - T0_out);
+}
+
+// vrati relativnu vlhkost v percentach
+float hts221_get_humidity(void)
+{
+	uint8_t data[2];
+
+	hts221_read_reg(data, 2, HTS221_HUMIDITY_OUT_L_ADDR);
+	int16_t h_out = (int16_t)((data[1] << 8) | data[0]);
+
+	// linearna interpolacia medzi kalibracnymi bodmi
+	float humidity = H0_rH + (float)(h_out - H0_T0_out) * (H1_rH - H0_rH) / (float)(H1_T0_out - H0_T0_out);
+
+	// datasheet: hodnoty mimo rozsahu treba orezat softverovo
+	if(humidity < 0.0f)
+	{
+		humidity = 0.0f;
+	}
+	if(humidity > 100.0f)
+	{
+		humidity = 100.0f;
+	}
+
+	return humidity;
 }
