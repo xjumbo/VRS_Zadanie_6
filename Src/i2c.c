@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * <h2><center>&copy; Copyright (c) 2019 STMicroelectronics.
+  * <h2><center>&copy; Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.</center></h2>
   *
   * This software component is licensed by ST under BSD 3-Clause license,
@@ -31,11 +31,11 @@ void MX_I2C1_Init(void)
   LL_I2C_InitTypeDef I2C_InitStruct = {0};
 
   LL_GPIO_InitTypeDef GPIO_InitStruct = {0};
-  
+
   LL_AHB1_GRP1_EnableClock(LL_AHB1_GRP1_PERIPH_GPIOB);
-  /**I2C1 GPIO Configuration  
+  /**I2C1 GPIO Configuration
   PB6   ------> I2C1_SCL
-  PB7   ------> I2C1_SDA 
+  PB7   ------> I2C1_SDA
   */
   GPIO_InitStruct.Pin = LL_GPIO_PIN_6|LL_GPIO_PIN_7;
   GPIO_InitStruct.Mode = LL_GPIO_MODE_ALTERNATE;
@@ -52,13 +52,12 @@ void MX_I2C1_Init(void)
   NVIC_SetPriority(I2C1_EV_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
   NVIC_EnableIRQ(I2C1_EV_IRQn);
 
-  /** I2C Initialization 
+  /** I2C Initialization
   */
   LL_I2C_EnableAutoEndMode(I2C1);
   LL_I2C_DisableOwnAddress2(I2C1);
   LL_I2C_DisableGeneralCall(I2C1);
   LL_I2C_EnableClockStretching(I2C1);
-
   I2C_InitStruct.PeripheralMode = LL_I2C_MODE_I2C;
   I2C_InitStruct.Timing = 0x2000090E;
   I2C_InitStruct.AnalogFilter = LL_I2C_ANALOGFILTER_ENABLE;
@@ -69,9 +68,7 @@ void MX_I2C1_Init(void)
   LL_I2C_Init(I2C1, &I2C_InitStruct);
   LL_I2C_SetOwnAddress2(I2C1, 0, LL_I2C_OWNADDRESS2_NOMASK);
 
-  LL_I2C_Enable(I2C1);
 }
-
 
 /* USER CODE BEGIN 1 */
 void i2c_master_read(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr)
@@ -110,7 +107,7 @@ void i2c_master_write(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_
 	LL_I2C_ClearFlag_STOP(I2C1);
 }
 
-void I2C1_EV_IRQHandler(void)
+void i2c_rx_irq_handler(void)
 {
 	if(LL_I2C_IsActiveFlag_RXNE(I2C1))
 	{
