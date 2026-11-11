@@ -1,83 +1,47 @@
-# Náplň cvičenia
-- zoznámenie sa s I2C
-- komunikácia s IMU prostredníctvom I2C
-- predstavenie zadania s I2C a senzorom
+# Zadanie 5 – Čítanie senzorov HTS221 a LPS25HB cez I2C a odosielanie dát cez USART2
 
-# I2C zbernica
+**Meno:** Dominik Ďurmek
+**AIS ID:** 126716
+**Predmet:** VRS – Vnorené riadiace systémy
+**Cvičenie:** štvrtok 10:00
 
-### Základné posielanie dát
-<p align="center">
-    <img src="docs/I2C_Basic_Address_and_Data_Frames.jpg" width="950" title="">
-</p>
+**Poznámka:** Tento README súbor bol vygenerovaný pomocou AI (Claude od Anthropic) a upravený podľa môjho riešenia.
+Pri riešení zadania som využil AI asistenta (Claude) na kontrolu kódu, kontrolu registrov podľa datasheetov a na zostavenie tohto README.
 
-### Posielanie väčšieho množstva dát
-<p align="center">
-    <img src="docs/I2C_Repeated_Start_Conditions.jpg" width="550" title="">
-</p>
+## Čo program robí
 
-# Konfigurácia I2C
+Program beží na doske Nucleo (STM32F303K8) so senzorovou doskou X-NUCLEO-IKS01A1. Cez I2C1 číta teplotu a vlhkosť zo senzora HTS221 a tlak zo senzora LPS25HB. Z tlaku počíta relatívnu výšku od zeme a všetky hodnoty posiela cez USART2 do PC vo formáte CSV. Projekt je vytvorený v CubeMX s využitím LL knižnice.
 
-<p align="center">
-    <img src="images/i2c_conf.PNG" width="850" title="GPIO pin block scheme">
-</p>
+1. **I2C komunikácia** – funkcie `i2c_master_read` a `i2c_master_write` podporujú prenos jedného aj viacerých bajtov. Čítanie používa repeated start a prijaté bajty ukladá prerušenie od I2C (RXNE) priamo do buffera. Funkcie majú ošetrený NACK a timeout, takže ak senzor neodpovedá, program sa nezasekne.
+2. **Knižnice senzorov** – drivery `HTS221` a `LPS25HB` nepoužívajú I2C funkcie priamo. Funkcie z `i2c.c` sa im odovzdajú ako callbacky (`hts221_register_callbacks`, `lps25hb_register_callbacks`), vďaka čomu je konfigurácia MCU oddelená od konfigurácie senzorov.
+3. **HTS221** – inicializácia overí register `WHO_AM_I` (0xBC), zapne senzor, nastaví block data update a frekvenciu merania 12,5 Hz. Kalibračné registre (0x30 – 0x3F) sa načítajú naraz jedným multi-byte čítaním. Teplota aj vlhkosť sa z nameraných hodnôt vypočítajú lineárnou interpoláciou podľa datasheetu, vlhkosť sa orezáva na rozsah 0 – 100 %.
+4. **LPS25HB** – inicializácia overí register `WHO_AM_I` (0xBD) a skúša obe možné adresy senzora (podľa zapojenia pinu SA0, 0xBA a 0xB8). Následne zapne senzor, nastaví block data update a frekvenciu 12,5 Hz. Tlak (24 bitov) sa číta naraz troma bajtmi a prepočíta sa na hPa (delením 4096).
+5. **Výpočet relatívnej výšky** – samostatná funkcia `lps25hb_calc_altitude` počíta výšku z barometrického vzorca `h = 44330 · (1 − (p / p0)^(1/5,255))`. Referenčný tlak `p0` sa určí ako priemer z 8 meraní krátko po spustení, takže výška je vzhľadom na miesto, kde sa doska zapla.
+6. **Odosielanie dát** – každých približne 100 ms sa pošle jeden riadok vo formáte `teplota,vlhkosť,tlak,výška`, napr. `23.4,45,1013.25,0.12`.
 
-- na obrázku je zobrazená konfigurácia I2C - okrem zobrazených parametrov je nutné povoliť globálne prerušenia od I2C ("error interrupt" nie je momentálne potrebný)
-- MCU má rolu "master", číta z registrov alebo zapisuje do registrov senzora ("slave") 
+Formát odosielaných hodnôt:
 
+| Veličina | Jednotka | Formát |
+|---|---|---|
+| teplota | °C | `xx.x` |
+| relatívna vlhkosť | % | `xx` |
+| tlak vzduchu | hPa | `xxxx.xx` |
+| relatívna výška od zeme | m | `xx.xx` |
 
-# IKS01A1 senzorová doska
+## Kde je čo v kóde
 
-<p align="center">
-    <img src="images/sensor_board.jpg" width="350" title="GPIO pin block scheme">
-</p>
+* `Src/i2c.c` – nastavenie I2C1 a funkcie `i2c_master_read`, `i2c_master_write`, `i2c_rx_irq_handler` (vrátane ošetrenia NACK a timeoutu)
+* `HTS221/hts221.h`, `HTS221/hts221.c` – makrá registrov, inicializácia, čítanie teploty a vlhkosti
+* `LPS25HB/lps25hb.h`, `LPS25HB/lps25hb.c` – makrá registrov, inicializácia, čítanie tlaku a výpočet výšky
+* `Src/usart.c` – nastavenie USART2 a funkcia `usart_send_string`
+* `Src/main.c` – registrácia callbackov, inicializácia senzorov, určenie referenčného tlaku a odosielanie CSV vo `while` slučke
+* `Src/stm32f3xx_it.c` – obsluha prerušenia `I2C1_EV_IRQHandler`, ktorá volá `i2c_rx_irq_handler`
+* `docs/` – datasheety senzorov
 
-- obsahuje viacero senzorových jednotiek: magnetometer (LIS3MDL), IMU - acc + gyro (LSM6DS0), sonzor vlhkosti a teploty (HTS221), barometrický snímač (LPS25HB) ...
-- v tomto prípade MCU komunikuje s IMU (acc a gyro) LSM6DS0
-- na obrázku je znázornené zapojenie senzorovej dosky k vývojovej doske s MCU
+## Ako to vyskúšať
 
-- ukážkový program komunikuje s LSM6DS0 prostredníctvom I2C a číta hodnotu zrýchlení v osiach x, y, z
+1. Nasadiť senzorovú dosku X-NUCLEO-IKS01A1 na Nucleo a nahrať program do dosky.
+2. Otvoriť Serial Oscilloscope (alebo iný terminál, napr. PuTTY) na porte ST-Link, rýchlosť 38400, 8 dátových bitov, bez parity, 1 stop bit.
+3. Po spustení sa približne 1 sekundu meria referenčný tlak, potom začnú chodiť riadky s hodnotami. V Serial Oscilloscope sa zobrazia 4 kanály (teplota, vlhkosť, tlak, výška).
 
-# Serial oscilloscope
-<p align="center">
-    <img src="images/serial_osc.png" width="950" title="Serial oscilloscope">
-</p>
-
-- aplíkácia pre vykreslovanie dát, ktoré sú priaté prostredníctvom sériovej komunikácie vo formáte CSV (comma-separated values) - napríklad "123,158,39.789,5639"
-- možnosť používať aj ako obyčajnú terminálovú aplikáciu (Putty)
-- nutnosť nastaviť COM port a prenosovú rýchlosť (baud rate)
-- po kliknutí na "Osciloscope" za otvorí nové okno s grafickým zobrazením priebehov (maximálne 9 kanálov, 3 kanály pre jedno okno), s ktorým je možné manipulovať (posúvať priebeh, meniť časovú základňu a rozsah zobrazovaných hodnôt)
-- k dispozícii na stiahnutie tu: https://x-io.co.uk/serial-oscilloscope/  
-
-# Zadanie 5 (10b)
-
-Vytvoriť aplikáciu, ktorá bude posielať dáta získané zo senzorov (LPS25HB, HTS221) cez USART do PC. Zobrazovanými údajmi budú teplota, relatívna vlhkosť vzduchu, tlak vzduchu a relatívna výška od zeme.
-
-### Úlohy
-
-1. Vytvorenie vlastného projektu pomocou CubeMX (**s využitím LL knižnice !**) a vlastného git repozitára - viditeľné commity, nastavenie ".gitignore".
-
-2. Vytvorenie funkcii v zdrojovom súbore "i2c.c" pre čítanie a zápis dát po I2C zbernici s možnosťou single aj multi byte prenosu (čítanie/zápis). Ak hodnota registra pozostáva z viacerých bytov, musí sa použit multi-byte prenos a byť vyčítaná naraz (nie postupne po bytoch vo viacerych čítaniach). Funckie z "i2c.c/h" nesmú byť priamo používané v knižnici senzora ale musia byť registrované ako "callback funkcie" (oddelenie konfiguracie MCU od konfiguracie senzora a jeho aplikacie). (**3 body**)
-
-3. Vytvoriť si vlastnú knižnicu pre senzory LPS25HB a HTS221 (**3 body + 3 body**)
-   - **Formát drivera**
-       - Vytvoriť zdrojový priečinok - v "Project explorer" -> pravé kliknutie na "Váš project" -> "new" -> "Source folder" (názov priečinku podľa názvu senzora) -> pravé kliknutie na nový priečinok a "Add/remove include path ..." .
-       - V prečinku senzora vytvoriť zdrojový a hlavičkový súbor pre daný senzor.
-       - V hlavičkovom súbore sa budú nachádzať makrá pre adresy registrov senzora a prípadne hodnoty daných registrov. Taktiež dekláracie funkcii pre prácu so senzorom.
-       - V zdrojovom súbore sa budú nachádzat vaše vlastné funkcie pre inicializáciu, vyčítavanie a zapisovanie dát zo/do senzora, spracovanie vyćítaných dát, získanie hodnoty meranej veličiny.
-     
-   - **Bližšia špecifikácia drivera**
-       - Knižnica musí obsahovať inicializačnú funkciu, ktorej úlohou je overiť pripojenie senzora a musí vykonať počiatočnú konfiguráciu senzora. Ako prvé overíte, či viete prečítať "WHO_AM_I" register a či hodnota, ktorú vám senzor vráti je totožná s hodnotou z dokumentácie. Následne zapíšete do registrov sonzora svoju vlastnú konfiguráciu. Prejdite si dokumentáciu, zistite čo všetko viete nastavovať pomocou registrov a podľa potreby si zvoľte vlastnú konfiguráciu senzora (frekvencia merania, merací rozsah ... ). (1 bod)
-
-       - Knižnica musí obsahovať funkciu na čítanie/zapisovanie dát zo/do senzora. Zapisovanie do senzora bude slúžiť napr. pri konfigurácii senzora a čítanie bude slúžiť na získavanie aktuálneho stavu senzora (ak je to potrebné), hodnôt meraných veličín ... . Ak zo senzora budete čítať viac ako jednu veličinu (napr. teplota a vlhkosť), tak pre každú meranú veličinu vytvorte samostatnú funkciu na jej čítanie. (1 bod)
-
-       - Údaje, ktoré sa majú zobrazovať ale nie su priamo získateľné zo senzora je potrebné na základe dostupných meraných hodnôt vypočítať (napr. relatívna výška od zeme, ...). Pre takýto "post processing", kedy sa z meraných údajov snažite niečo vypočítať vytvorte samostatnú funkciu. (1 bod)
-
-7. Údaje sa budú posielať cez USART vo formáte CSV a zobrazovať na PC pomocou "serial osciloscope". (**1 bod**)
-
-   - Formátovanie odosielaných hodnôt. Hranatá zatvorka predstavuje v akých jednotkách je zobrazovaná hodnota. Niektoré hodnoty sú zobrazované s presnosťou na 1 alebo 2 desatinné miesta. "xx.x" predstavuje digity vyhradené pre číslice - jedno desatinné miesto, jednotky a desiatky:
-       - teplota [°C]: "xx.x"
-       - rel. vlhkosť [%]: "xx"
-       - tlak vzduchu [hPa]: "xxxx.xx"
-       - relatívna výška od zeme [m]: "xx.xx"
-   
-9. Odovzdáva sa projekt osobne na začiatku 8. cvičenia + počas odovzdávania sa skontroluje aj git.
+Ak sa inicializácia niektorého senzora nepodarí (senzor neodpovedá alebo vráti zlú hodnotu `WHO_AM_I`), LED na PB3 rýchlo bliká a program nepokračuje.
