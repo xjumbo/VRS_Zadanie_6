@@ -37,7 +37,7 @@
 void MX_USART2_UART_Init(void);
 
 /* USER CODE BEGIN Prototypes */
-
+void usart_send_string(const char *text);
 /* USER CODE END Prototypes */
 
 #ifdef __cplusplus

@@ -26,7 +26,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include <stdio.h>
 #include "hts221.h"
+#include "lps25hb.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -68,7 +70,9 @@ void SystemClock_Config(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-
+  float temperature, humidity, pressure, altitude;
+  float pressure_ref = 0.0f;
+  char tx_buffer[64];
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -99,11 +103,22 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
   LL_I2C_Enable(I2C1);
+
   hts221_register_callbacks(i2c_master_read, i2c_master_write);
-  if(hts221_init() == 0)
+  lps25hb_register_callbacks(i2c_master_read, i2c_master_write);
+
+  if(hts221_init() == 0 || lps25hb_init() == 0)
   {
-  	Error_Handler();
+     Error_Handler();
   }
+
+  LL_mDelay(200);
+  for(uint8_t i = 0; i < 8; i++)
+  {
+     pressure_ref += lps25hb_get_pressure();
+ 	 LL_mDelay(100);
+  }
+  pressure_ref /= 8.0f;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -113,6 +128,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    temperature = hts221_get_temperature();
+    humidity = hts221_get_humidity();
+    pressure = lps25hb_get_pressure();
+    altitude = lps25hb_calc_altitude(pressure, pressure_ref);
+    snprintf(tx_buffer, sizeof(tx_buffer), "%.1f,%.0f,%.2f,%.2f\r\n", temperature, humidity, pressure, altitude);
+    usart_send_string(tx_buffer);
+
+    LL_GPIO_TogglePin(GPIOB, LL_GPIO_PIN_3);
+    LL_mDelay(100);
   }
   /* USER CODE END 3 */
 }
@@ -165,6 +189,11 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
+  while(1)
+  {
+	  LL_GPIO_TogglePin(GPIOB, LL_GPIO_PIN_3);
+	  LL_mDelay(100);
+  }
 
   /* USER CODE END Error_Handler_Debug */
 }

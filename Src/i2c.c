@@ -71,21 +71,60 @@ void MX_I2C1_Init(void)
 }
 
 /* USER CODE BEGIN 1 */
+#define I2C_TIMEOUT		100000
+
+static uint8_t i2c_wait(uint32_t (*flag)(I2C_TypeDef *))
+{
+	uint32_t timeout = I2C_TIMEOUT;
+
+	while(!flag(I2C1))
+	{
+		if(LL_I2C_IsActiveFlag_NACK(I2C1) || (timeout-- == 0))
+		{
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static void i2c_abort(void)
+{
+	LL_I2C_DisableIT_RX(I2C1);
+	LL_I2C_Disable(I2C1);
+	LL_I2C_Enable(I2C1);
+}
+
 void i2c_master_read(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr)
 {
+
+	for(uint8_t i = 0; i < length; i++)
+	{
+		data[i] = 0;
+	}
+
 	i2c_rx_buf = data;
 	i2c_rx_idx = 0;
 	LL_I2C_EnableIT_RX(I2C1);
 
-	// write phase: send register address, no STOP (soft end)
 	LL_I2C_HandleTransfer(I2C1, slave_addr, LL_I2C_ADDRSLAVE_7BIT, 1, LL_I2C_MODE_SOFTEND, LL_I2C_GENERATE_START_WRITE);
-	while(!LL_I2C_IsActiveFlag_TXIS(I2C1));
+	if(i2c_wait(LL_I2C_IsActiveFlag_TXIS))
+	{
+		i2c_abort();
+		return;
+	}
 	LL_I2C_TransmitData8(I2C1, reg);
-	while(!LL_I2C_IsActiveFlag_TC(I2C1));
+	if(i2c_wait(LL_I2C_IsActiveFlag_TC))
+	{
+		i2c_abort();
+		return;
+	}
 
-	// read phase: repeated start, 'length' bytes, STOP at the end
 	LL_I2C_HandleTransfer(I2C1, slave_addr, LL_I2C_ADDRSLAVE_7BIT, length, LL_I2C_MODE_AUTOEND, LL_I2C_GENERATE_RESTART_7BIT_READ);
-	while(!LL_I2C_IsActiveFlag_STOP(I2C1));
+	if(i2c_wait(LL_I2C_IsActiveFlag_STOP))
+	{
+		i2c_abort();
+		return;
+	}
 
 	LL_I2C_ClearFlag_STOP(I2C1);
 	LL_I2C_DisableIT_RX(I2C1);
@@ -94,16 +133,28 @@ void i2c_master_read(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_a
 void i2c_master_write(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr)
 {
 	LL_I2C_HandleTransfer(I2C1, slave_addr, LL_I2C_ADDRSLAVE_7BIT, length + 1, LL_I2C_MODE_AUTOEND, LL_I2C_GENERATE_START_WRITE);
-	while(!LL_I2C_IsActiveFlag_TXIS(I2C1));
+	if(i2c_wait(LL_I2C_IsActiveFlag_TXIS))
+	{
+		i2c_abort();
+		return;
+	}
 	LL_I2C_TransmitData8(I2C1, reg);
 
 	for(uint8_t i = 0; i < length; i++)
 	{
-		while(!LL_I2C_IsActiveFlag_TXIS(I2C1));
+		if(i2c_wait(LL_I2C_IsActiveFlag_TXIS))
+		{
+			i2c_abort();
+			return;
+		}
 		LL_I2C_TransmitData8(I2C1, data[i]);
 	}
 
-	while(!LL_I2C_IsActiveFlag_STOP(I2C1));
+	if(i2c_wait(LL_I2C_IsActiveFlag_STOP))
+	{
+		i2c_abort();
+		return;
+	}
 	LL_I2C_ClearFlag_STOP(I2C1);
 }
 

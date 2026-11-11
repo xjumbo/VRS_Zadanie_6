@@ -43,4 +43,12 @@
 typedef void (*lps25hb_read_cb_t)(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr);
 typedef void (*lps25hb_write_cb_t)(uint8_t *data, uint8_t length, uint8_t reg, uint8_t slave_addr);
 
+/* verejne funkcie */
+void lps25hb_register_callbacks(lps25hb_read_cb_t read_cb, lps25hb_write_cb_t write_cb);
+uint8_t lps25hb_init(void);
+void lps25hb_read_reg(uint8_t *data, uint8_t length, uint8_t reg);
+void lps25hb_write_reg(uint8_t *data, uint8_t length, uint8_t reg);
+float lps25hb_get_pressure(void);
+float lps25hb_calc_altitude(float pressure_hpa, float reference_hpa);
+
 #endif /* LPS25HB_H_ */
